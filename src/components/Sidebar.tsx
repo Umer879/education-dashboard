@@ -1,4 +1,5 @@
 "use client";
+import { ReactElement } from "react";
 
 import { useState } from "react";
 import Link from "next/link";
@@ -18,7 +19,7 @@ import {
 interface MenuItem {
   name: string;
   href: string;
-  icon: JSX.Element;
+  icon: ReactElement;
 }
 
 const menuItems: MenuItem[] = [
