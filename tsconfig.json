@@ -15,9 +15,9 @@
     "moduleResolution": "bundler",
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "jsx": "preserve",         // keep preserve for Next.js
+    "jsx": "react-jsx",            // use react-jsx for Next.js 13+ with TSX
     "incremental": true,
-    "types": ["react", "node"],  // explicitly add react and node types
+    "types": ["react", "node"],    // keep react & node types
     "plugins": [
       {
         "name": "next"
