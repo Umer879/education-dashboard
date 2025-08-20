@@ -1,7 +1,5 @@
 "use client";
-import { ReactNode } from "react";
-
-import { useState } from "react";
+import { ReactElement, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -19,7 +17,7 @@ import {
 interface MenuItem {
   name: string;
   href: string;
-  icon: ReactNode;
+  icon: ReactElement;
 }
 
 const menuItems: MenuItem[] = [
