@@ -3,22 +3,21 @@ import { useState, useEffect } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { FiEdit, FiTrash2, FiSearch } from "react-icons/fi";
+import Swal from "sweetalert2";
+import withReactContent from "sweetalert2-react-content";
+const MySwal = withReactContent(Swal);
+import api from "@/utils/api"; // Axios instance
 
 interface Course {
-  id: number;
+  _id: string;
   title: string;
   description: string;
-  duration: string;
+  duration?: string;
 }
 
 export default function CoursesPage() {
-  const [courses, setCourses] = useState<Course[]>([
-    { id: 1, title: "Mathematics 101", description: "Basic algebra and geometry", duration: "3 Months" },
-    { id: 2, title: "English Literature", description: "Shakespeare and modern poetry", duration: "4 Months" },
-    { id: 3, title: "Computer Science Basics", description: "Programming fundamentals", duration: "6 Months" },
-    { id: 4, title: "Physics Fundamentals", description: "Newton’s laws and thermodynamics", duration: "5 Months" },
-  ]);
-
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editCourse, setEditCourse] = useState<Course | null>(null);
@@ -27,17 +26,10 @@ export default function CoursesPage() {
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
   const recordsPerPage = 5;
-  const filteredCourses = courses.filter(
-    (c) =>
-      c.title.toLowerCase().includes(search.toLowerCase()) ||
-      c.description.toLowerCase().includes(search.toLowerCase())
-  );
-  const totalPages = Math.ceil(filteredCourses.length / recordsPerPage);
-  const startIndex = (currentPage - 1) * recordsPerPage;
-  const paginatedCourses = filteredCourses.slice(startIndex, startIndex + recordsPerPage);
 
   // Detect mobile
   const [isMobile, setIsMobile] = useState(false);
+
   useEffect(() => {
     const checkScreenSize = () => setIsMobile(window.innerWidth <= 600);
     checkScreenSize();
@@ -45,25 +37,79 @@ export default function CoursesPage() {
     return () => window.removeEventListener("resize", checkScreenSize);
   }, []);
 
-  const handleSave = () => {
-    if (!formData.title.trim() || !formData.description.trim() || !formData.duration.trim()) return;
-    if (editCourse) {
-      setCourses((prev) =>
-        prev.map((c) => (c.id === editCourse.id ? { ...c, ...formData } : c))
-      );
-    } else {
-      setCourses((prev) => [...prev, { id: Date.now(), ...formData }]);
+  // Fetch courses from API
+  useEffect(() => {
+    fetchCourses();
+  }, []);
+
+  const fetchCourses = async () => {
+    try {
+      setLoading(true);
+      const res = await api.get("/courses");
+      setCourses(res.data);
+    } catch (error) {
+      console.error("Error fetching courses:", error);
+    } finally {
+      setLoading(false);
     }
-    setFormData({ title: "", description: "", duration: "" });
-    setEditCourse(null);
-    setIsModalOpen(false);
   };
 
-  const handleDelete = (id: number) => {
-    if (confirm("Are you sure you want to delete this course?")) {
-      setCourses((prev) => prev.filter((c) => c.id !== id));
+  const handleSave = async () => {
+    if (!formData.title.trim() || !formData.description.trim()) return;
+
+    try {
+      if (editCourse) {
+        // PUT request
+        const res = await api.put(`/courses/${editCourse._id}`, formData);
+        setCourses((prev) =>
+          prev.map((c) => (c._id === editCourse._id ? res.data : c))
+        );
+      } else {
+        // POST request
+        const res = await api.post("/courses", formData);
+        setCourses((prev) => [...prev, res.data]);
+      }
+      setFormData({ title: "", description: "", duration: "" });
+      setEditCourse(null);
+      setIsModalOpen(false);
+    } catch (error) {
+      console.error("Error saving course:", error);
     }
   };
+
+const handleDelete = async (id: string) => {
+  const result = await MySwal.fire({
+    title: "Are you sure?",
+    text: "This course will be permanently deleted!",
+    icon: "warning",
+    showCancelButton: true,
+    confirmButtonColor: "#1E40AF",
+    cancelButtonColor: "#d33",
+    confirmButtonText: "Yes, delete it!",
+  });
+
+  if (result.isConfirmed) {
+    try {
+      await api.delete(`/courses/${id}`);
+      setCourses((prev) => prev.filter((c) => c._id !== id));
+
+      await MySwal.fire({
+        title: "Deleted!",
+        text: "Course has been deleted.",
+        icon: "success",
+        confirmButtonColor: "#1E40AF",
+      });
+    } catch (error) {
+      console.error("Error deleting course:", error);
+      await MySwal.fire({
+        title: "Error!",
+        text: "There was a problem deleting the course.",
+        icon: "error",
+        confirmButtonColor: "#1E40AF",
+      });
+    }
+  }
+};
 
   const openAddModal = () => {
     setEditCourse(null);
@@ -73,9 +119,32 @@ export default function CoursesPage() {
 
   const openEditModal = (course: Course) => {
     setEditCourse(course);
-    setFormData({ title: course.title, description: course.description, duration: course.duration });
+    setFormData({
+      title: course.title || "",
+      description: course.description || "",
+      duration: course.duration || "",
+    });
     setIsModalOpen(true);
   };
+
+  const filteredCourses = courses.filter(
+    (c) =>
+      c.title?.toLowerCase().includes(search.toLowerCase()) ||
+      c.description?.toLowerCase().includes(search.toLowerCase())
+  );
+  const totalPages = Math.ceil(filteredCourses.length / recordsPerPage);
+  const startIndex = (currentPage - 1) * recordsPerPage;
+  const paginatedCourses = filteredCourses.slice(startIndex, startIndex + recordsPerPage);
+
+  if (loading) {
+    return (
+      <ProtectedRoute>
+        <DashboardLayout>
+          <p className="text-center mt-10">Loading courses...</p>
+        </DashboardLayout>
+      </ProtectedRoute>
+    );
+  }
 
   return (
     <ProtectedRoute>
@@ -120,10 +189,10 @@ export default function CoursesPage() {
               </thead>
               <tbody>
                 {paginatedCourses.map((c) => (
-                  <tr key={c.id} className="border-b hover:bg-gray-50 transition">
+                  <tr key={c._id} className="border-b hover:bg-gray-50 transition">
                     <td className="p-4">{c.title}</td>
                     <td className="p-4">{c.description}</td>
-                    <td className="p-4">{c.duration}</td>
+                    <td className="p-4">{c.duration || "-"}</td>
                     <td className="p-4 flex justify-center gap-4">
                       <button
                         onClick={() => openEditModal(c)}
@@ -132,7 +201,7 @@ export default function CoursesPage() {
                         <FiEdit size={18} />
                       </button>
                       <button
-                        onClick={() => handleDelete(c.id)}
+                        onClick={() => handleDelete(c._id)}
                         className="text-red-500 hover:text-red-700 transition"
                       >
                         <FiTrash2 size={18} />
@@ -151,14 +220,14 @@ export default function CoursesPage() {
             </table>
           </div>
         ) : (
-          <div className="grid gap-4">
+          <div className="block md:hidden space-y-4">
             {paginatedCourses.map((c) => (
               <div
-                key={c.id}
-                className="bg-white p-4 rounded-xl shadow-md border border-gray-100 hover:shadow-lg transition-shadow"
+                key={c._id}
+                className="bg-white rounded-lg shadow-md p-4 border border-gray-200"
               >
                 <div className="flex justify-between items-center mb-2">
-                  <h2 className="text-lg font-semibold text-[#1E40AF]">{c.title}</h2>
+                  <h3 className="text-lg font-semibold text-[#1E40AF]">{c.title}</h3>
                   <div className="flex gap-3">
                     <button
                       onClick={() => openEditModal(c)}
@@ -167,7 +236,7 @@ export default function CoursesPage() {
                       <FiEdit size={18} />
                     </button>
                     <button
-                      onClick={() => handleDelete(c.id)}
+                      onClick={() => handleDelete(c._id)}
                       className="text-red-500 hover:text-red-700"
                     >
                       <FiTrash2 size={18} />
@@ -175,10 +244,10 @@ export default function CoursesPage() {
                   </div>
                 </div>
                 <p className="text-sm text-gray-600">
-                  <span className="font-medium">Description:</span> {c.description}
+                  <span className="font-medium text-red-600">Description:</span> {c.description}
                 </p>
                 <p className="text-sm text-gray-600">
-                  <span className="font-medium">Duration:</span> {c.duration}
+                  <span className="font-medium text-red-600">Duration:</span> {c.duration || "-"}
                 </p>
               </div>
             ))}
@@ -239,7 +308,7 @@ export default function CoursesPage() {
               />
               <input
                 type="text"
-                placeholder="Duration (e.g. 3 Months)"
+                placeholder="Duration (optional)"
                 className="border border-gray-300 rounded-lg p-2 w-full mb-4 focus:outline-none focus:ring-2 focus:ring-[#7495ff]"
                 value={formData.duration}
                 onChange={(e) => setFormData({ ...formData, duration: e.target.value })}

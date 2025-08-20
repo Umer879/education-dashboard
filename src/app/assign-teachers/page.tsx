@@ -1,21 +1,30 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { FiEdit, FiTrash2, FiEye, FiPlus } from "react-icons/fi";
 import Swal from "sweetalert2";
+import api from "@/utils/api";
 
-interface CourseCategory {
+// Interfaces
+interface Teacher {
   _id: string;
   name: string;
 }
 
+interface Course {
+  _id: string;
+  title: string; // Backend field fixed
+  category: { _id: string; name: string };
+}
+
 interface Assignment {
   _id: string;
-  image: string;
+  teacherId: string;
   teacherName: string;
+  courseId: string;
   courseName: string;
-  courseCategory: CourseCategory;
+  courseCategory: { _id: string; name: string };
   description: string;
   startDate: string;
   endDate: string;
@@ -26,39 +35,14 @@ interface Assignment {
 }
 
 export default function AssignCoursesToTeachersPage() {
-  const [assignments, setAssignments] = useState<Assignment[]>([
-    {
-      _id: "1",
-      image: "/assets/math.jpeg",
-      teacherName: "John Doe",
-      courseName: "Mathematics 101",
-      courseCategory: { _id: "c1", name: "Mathematics" },
-      description: "Basic algebra and geometry for beginners.",
-      startDate: "2025-09-01",
-      endDate: "2025-12-01",
-      durationWeeks: 12,
-      status: "active",
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    },
-    {
-      _id: "2",
-      image: "/assets/math.jpeg",
-      teacherName: "Jane Smith",
-      courseName: "Physics for Engineers",
-      courseCategory: { _id: "c2", name: "Physics" },
-      description: "Introductory mechanics and thermodynamics.",
-      startDate: "2025-09-05",
-      endDate: "2025-12-15",
-      durationWeeks: 14,
-      status: "active",
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    },
-  ]);
+  const [assignments, setAssignments] = useState<Assignment[]>([]);
+  const [teachers, setTeachers] = useState<Teacher[]>([]);
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [teacherKiId, setTeacherKiId] = useState(teachers[0]?._id || "");
 
   const [currentPage, setCurrentPage] = useState(1);
   const recordsPerPage = 3;
+
   const totalPages = Math.ceil(assignments.length / recordsPerPage);
   const startIndex = (currentPage - 1) * recordsPerPage;
   const paginatedAssignments = assignments.slice(
@@ -66,24 +50,83 @@ export default function AssignCoursesToTeachersPage() {
     startIndex + recordsPerPage
   );
 
-  const [viewItem, setViewItem] = useState<Assignment | null>(null);
-  const [editItem, setEditItem] = useState<Assignment | null>(null);
-  const [showAddModal, setShowAddModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editAssignment, setEditAssignment] = useState<Partial<Assignment>>({});
 
-  // New form state
+  const [showAddModal, setShowAddModal] = useState(false);
   const [newAssignment, setNewAssignment] = useState<Partial<Assignment>>({
-    teacherName: "",
-    courseName: "",
-    courseCategory: { _id: "", name: "" },
+    teacherId: "",
+    courseId: "",
     description: "",
     startDate: "",
     endDate: "",
     durationWeeks: 0,
     status: "active",
-    image: "/assets/math.jpeg",
   });
 
-  const handleDelete = (id: string) => {
+  // Fetch data
+  // Fetch teachers and courses initially
+  useEffect(() => {
+    const fetchTeachersAndCourses = async () => {
+      try {
+        const [teacherRes, courseRes] = await Promise.all([
+          api.get("/teachers"),
+          api.get("/courses"),
+        ]);
+
+        const fetchedTeachers = teacherRes.data;
+        setTeachers(fetchedTeachers);
+        setCourses(courseRes.data);
+        // Set first teacher as default
+        if (fetchedTeachers.length > 0) {
+          setTeacherKiId(fetchedTeachers[0]._id);
+        }
+      } catch (err) {
+        console.error(err);
+        Swal.fire("Error", "Failed to fetch data", "error");
+      }
+    };
+
+    fetchTeachersAndCourses();
+  }, []);
+
+  // When teacher changes
+  useEffect(() => {
+    console.log("Selected teacher ID:", teacherKiId);
+    fetchAssignments();
+  }, [teacherKiId]);
+
+  // Fetch assignments (courses) for selected teacher
+  const fetchAssignments = async () => {
+    try {
+      if (!teacherKiId) return;
+
+      const res = await api.get(`/teacher-courses/${teacherKiId}/courses`);
+
+      console.log("Raw API response:", res.data);
+
+      const coursesData = Array.isArray(res.data.courses)
+        ? res.data.courses
+        : [];
+
+      console.log("Courses for teacher:", coursesData);
+
+      setAssignments(
+        coursesData.map((c: any) => ({
+          _id: c._id,
+          courseName: c.title,
+          description: c.description,
+          durationWeeks: c.duration,
+        }))
+      );
+    } catch (err) {
+      console.error(err);
+      Swal.fire("Error", "Failed to fetch courses", "error");
+    }
+  };
+
+  // ✅ Delete assignment
+  const handleDelete = async (courseId: string) => {
     Swal.fire({
       title: "Are you sure?",
       text: "This assignment will be permanently deleted.",
@@ -92,53 +135,84 @@ export default function AssignCoursesToTeachersPage() {
       confirmButtonColor: "#166534",
       cancelButtonColor: "#d33",
       confirmButtonText: "Yes, delete it!",
-    }).then((result) => {
+    }).then(async (result) => {
       if (result.isConfirmed) {
-        setAssignments((prev) => prev.filter((a) => a._id !== id));
-        Swal.fire("Deleted!", "The assignment has been deleted.", "success");
+        try {
+          await api.delete(`/teacher-courses/remove`, {
+            data: { teacherId: teacherKiId, courseId },
+          });
+          setAssignments((prev) => prev.filter((a) => a._id !== courseId));
+          Swal.fire("Deleted!", "The assignment has been deleted.", "success");
+        } catch (error) {
+          Swal.fire("Error", "Failed to delete assignment", "error");
+        }
       }
     });
   };
 
-  const handleEditSave = () => {
-    if (!editItem) return;
-    setAssignments((prev) =>
-      prev.map((a) => (a._id === editItem._id ? editItem : a))
-    );
-    setEditItem(null);
+  // ✅ Open Edit Modal
+  const openEditModal = (assignment: Assignment) => {
+    setEditAssignment(assignment);
+    setShowEditModal(true);
   };
 
-  const handleAddAssignment = () => {
-    if (!newAssignment.teacherName || !newAssignment.courseName) {
-      Swal.fire("Error", "Please fill in all required fields.", "error");
+  // ✅ Update assignment
+  const handleUpdateAssignment = async () => {
+    if (!editAssignment._id || !editAssignment.courseId) {
+      Swal.fire("Error", "Missing required fields", "error");
       return;
     }
-    setAssignments((prev) => [
-      ...prev,
-      {
-        ...(newAssignment as Assignment),
-        _id: Date.now().toString(),
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      },
-    ]);
-    setNewAssignment({
-      teacherName: "",
-      courseName: "",
-      courseCategory: { _id: "", name: "" },
-      description: "",
-      startDate: "",
-      endDate: "",
-      durationWeeks: 0,
-      status: "active",
-      image: "/assets/math.jpeg",
-    });
-    setShowAddModal(false);
+
+    try {
+      await api.put("/teacher-courses/update", {
+        teacherId: teacherKiId,
+        oldCourseId: editAssignment._id, // old assigned course
+        newCourseId: editAssignment.courseId, // new selected course
+      });
+
+      await fetchAssignments(); // Refresh list
+      Swal.fire("Success", "Assignment updated successfully!", "success");
+      setShowEditModal(false);
+    } catch (error) {
+      Swal.fire("Error", "Failed to update assignment", "error");
+    }
+  };
+
+  // Add assignment
+  const handleAddAssignment = async () => {
+    console.log("sbdf", newAssignment.teacherId);
+    if (!newAssignment.teacherId || !newAssignment.courseId) {
+      Swal.fire("Error", "Please select a teacher and a course.", "error");
+      return;
+    }
+    try {
+      await api.post("/teacher-courses/assign", {
+        teacherId: newAssignment.teacherId,
+        courseId: newAssignment.courseId,
+      });
+
+      // await fetchAssignments();
+      Swal.fire("Success", "Course assigned successfully!", "success");
+      setNewAssignment({
+        teacherId: "",
+        courseId: "",
+        description: "",
+        startDate: "",
+        endDate: "",
+        durationWeeks: 0,
+        status: "active",
+      });
+      setShowAddModal(false);
+    } catch (err) {
+      console.error(err);
+      Swal.fire("Error", "Failed to assign course", "error");
+    }
   };
 
   return (
     <ProtectedRoute>
       <DashboardLayout>
+        {/* Header */}
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-2xl font-bold text-[#1E40AF]">
             Assign Courses to Teachers
@@ -151,49 +225,92 @@ export default function AssignCoursesToTeachersPage() {
           </button>
         </div>
 
-        {/* Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {paginatedAssignments.map((item) => (
-            <div
-              key={item._id}
-              className="bg-white shadow rounded-lg overflow-hidden border p-4"
-            >
-              <div className="mb-4">
-                <img
-                  src={item.image}
-                  alt={item.courseName}
-                  className="rounded w-full h-40 object-cover"
-                />
-              </div>
-              <h2 className="text-lg font-bold text-[#1E40AF]">
-                {item.courseName}
-              </h2>
-              <p className="text-gray-600">Teacher: {item.teacherName}</p>
-              <p className="text-gray-600">
-                Duration: {item.durationWeeks} weeks
-              </p>
-              <div className="flex justify-end gap-3 mt-4">
-                <button
-                  onClick={() => setViewItem({ ...item })}
-                  className="text-[#1E40AF] hover:text-[#1d4add]"
-                >
-                  <FiEye size={18} />
-                </button>
-                <button
-                  onClick={() => setEditItem({ ...item })}
-                  className="text-blue-500 hover:text-blue-700"
-                >
-                  <FiEdit size={18} />
-                </button>
-                <button
-                  onClick={() => handleDelete(item._id)}
-                  className="text-red-500 hover:text-red-700"
-                >
-                  <FiTrash2 size={18} />
-                </button>
-              </div>
-            </div>
+        <select
+          value={teacherKiId}
+          onChange={(e) => setTeacherKiId(e.target.value)}
+          className="custom-select"
+        >
+          <option value="">Select a teacher</option>
+          {teachers.map((t) => (
+            <option key={t._id} value={t._id}>
+              {t.name}
+            </option>
           ))}
+        </select>
+
+        {/* Assignment Cards */}
+        {/* ✅ Table (only for md and above) */}
+        <div className="hidden md:block w-full overflow-x-auto bg-white rounded-xl shadow-lg border border-gray-100 mt-5">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-[#1E40AF] text-white">
+                <th className="p-4">Course Name</th>
+                <th className="p-4">Description</th>
+                <th className="p-4">Duration</th>
+                <th className="p-4 text-center">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {assignments.length > 0 ? (
+                assignments.map((a) => (
+                  <tr
+                    key={a._id}
+                    className="border-b hover:bg-green-50 transition-colors"
+                  >
+                    <td className="p-4">{a.courseName}</td>
+                    <td className="p-4">{a.description}</td>
+                    <td className="p-4">{a.durationWeeks}</td>
+                    <td className="p-4 flex justify-center gap-4">
+                      
+                      <button
+                        onClick={() => handleDelete(a._id)}
+                        className="text-red-500 hover:text-red-700 transition"
+                      >
+                        <FiTrash2 size={18} />
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={4} className="text-center py-4">
+                    No courses assigned
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* ✅ Mobile Cards (only for sm) */}
+        <div className="block md:hidden space-y-4 mt-5">
+          {assignments.length > 0 ? (
+            assignments.map((a) => (
+              <div
+                key={a._id}
+                className="bg-white rounded-lg shadow-md p-4 border border-gray-200"
+              >
+                <h3 className="text-lg font-bold text-[#1E40AF]">
+                  {a.courseName}
+                </h3>
+                <p className="text-gray-600 mt-1">{a.description}</p>
+                <p className="text-sm text-gray-500 mt-1">
+                  Duration: {a.durationWeeks}
+                </p>
+
+                <div className="flex justify-end gap-4 mt-3">
+                  <button className="text-blue-500 hover:text-blue-700 transition">
+                    <FiEdit size={18} />
+                  </button>
+                  <button className="text-red-500 hover:text-red-700 transition">
+                    <FiTrash2 size={18} />
+                  </button>
+                </div>
+              </div>
+            ))
+          ) : (
+            <p className="text-center text-gray-500">No courses assigned</p>
+          )}
         </div>
 
         {/* Pagination */}
@@ -225,220 +342,90 @@ export default function AssignCoursesToTeachersPage() {
           </button>
         </div>
 
-       {/* Add Modal */}
-{showAddModal && (
-  <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center">
-    <div className="bg-white p-6 rounded-lg w-full max-w-lg">
-<h2 className="text-xl font-bold text-[#1E40AF] mb-4">
+        {/* Add Modal */}
+        {showAddModal && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center">
+            <div className="bg-white p-6 rounded-lg w-full max-w-lg">
+              <h2 className="text-xl font-bold text-[#1E40AF] mb-4">
                 Assign New Course
               </h2>
-      {/* Image Upload */}
-      <div className="mb-2">
-        <input
-          type="file"
-          accept="image/*"
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (file) {
-              const imageUrl = URL.createObjectURL(file);
-              setNewAssignment({ ...newAssignment, image: imageUrl });
-            }
-          }}
-          className="border p-2 rounded w-full"
-        />
-      </div>
 
-      <input
-        type="text"
-        placeholder="Teacher Name"
-        value={newAssignment.teacherName || ""}
-        onChange={(e) =>
-          setNewAssignment({ ...newAssignment, teacherName: e.target.value })
-        }
-        className="border p-2 rounded w-full mb-2"
-      />
-      <input
-        type="text"
-        placeholder="Course Name"
-        value={newAssignment.courseName || ""}
-        onChange={(e) =>
-          setNewAssignment({ ...newAssignment, courseName: e.target.value })
-        }
-        className="border p-2 rounded w-full mb-2"
-      />
-      <input
-        type="text"
-        placeholder="Category"
-        value={newAssignment.courseCategory?.name || ""}
-        onChange={(e) =>
-          setNewAssignment({
-            ...newAssignment,
-            courseCategory: {
-              _id: Date.now().toString(),
-              name: e.target.value,
-            },
-          })
-        }
-        className="border p-2 rounded w-full mb-2"
-      />
-      <textarea
-        placeholder="Description"
-        value={newAssignment.description || ""}
-        onChange={(e) =>
-          setNewAssignment({ ...newAssignment, description: e.target.value })
-        }
-        className="border p-2 rounded w-full mb-2"
-      />
-      <input
-        type="date"
-        value={newAssignment.startDate || ""}
-        onChange={(e) =>
-          setNewAssignment({ ...newAssignment, startDate: e.target.value })
-        }
-        className="border p-2 rounded w-full mb-2"
-      />
-      <input
-        type="date"
-        value={newAssignment.endDate || ""}
-        onChange={(e) =>
-          setNewAssignment({ ...newAssignment, endDate: e.target.value })
-        }
-        className="border p-2 rounded w-full mb-2"
-      />
-      <input
-        type="number"
-        placeholder="Duration (weeks)"
-        value={newAssignment.durationWeeks || ""}
-        onChange={(e) =>
-          setNewAssignment({
-            ...newAssignment,
-            durationWeeks: Number(e.target.value),
-          })
-        }
-        className="border p-2 rounded w-full mb-4"
-      />
-
-      <div className="flex justify-end gap-2">
-        <button
-          onClick={() => setShowAddModal(false)}
-          className="px-4 py-2 bg-gray-300 rounded hover:bg-gray-400"
-        >
-          Cancel
-        </button>
-        <button
-          onClick={handleAddAssignment}
-          className="px-4 py-2 bg-[#1E40AF] text-white rounded hover:bg-[#1b46d3]"
-        >
-          Add
-        </button>
-      </div>
-    </div>
-  </div>
-)}
-
-
-        {/* View Modal */}
-        {viewItem && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]">
-            <div className="bg-white p-6 rounded-lg w-full max-w-lg overflow-y-auto max-h-[90vh]">
-              <img
-                src={viewItem.image}
-                alt={viewItem.courseName}
-                className="rounded mb-4 w-full h-48 object-cover"
-              />
-              <h2 className="text-xl font-bold text-[#1E40AF] mb-4">
-                {viewItem.courseName}
-              </h2>
-              <p className="mb-2">
-                <strong>Teacher:</strong> {viewItem.teacherName}
-              </p>
-              <p className="mb-2">
-                <strong>Category:</strong> {viewItem.courseCategory.name}
-              </p>
-              <p className="mb-2">
-                <strong>Description:</strong> {viewItem.description}
-              </p>
-              <p className="mb-2">
-                <strong>Start Date:</strong> {viewItem.startDate}
-              </p>
-              <p className="mb-2">
-                <strong>End Date:</strong> {viewItem.endDate}
-              </p>
-              <p className="mb-2">
-                <strong>Duration:</strong> {viewItem.durationWeeks} weeks
-              </p>
-              <p className="mb-2">
-                <strong>Status:</strong> {viewItem.status}
-              </p>
-              <div className="flex justify-end">
-                <button
-                  onClick={() => setViewItem(null)}
-                  className="px-4 py-2 bg-[#1E40AF] text-white rounded hover:bg-[#1c47d6]"
-                >
-                  Close
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Edit Modal */}
-        {editItem && (
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center">
-            <div className="bg-white p-6 rounded-lg w-full max-w-lg overflow-y-auto max-h-[90vh]">
-              <h2 className="text-xl font-bold text-[#1E40AF] mb-4">
-                Edit Assignment
-              </h2>
-              <input
-                type="text"
-                placeholder="Course Name"
-                value={editItem.courseName || ""}
+              <select
+                value={newAssignment.teacherId || ""}
                 onChange={(e) =>
-                  setEditItem({ ...editItem, courseName: e.target.value })
+                  setNewAssignment({
+                    ...newAssignment,
+                    teacherId: e.target.value,
+                  })
                 }
                 className="border p-2 rounded w-full mb-2"
-              />
-              <input
-                type="text"
-                placeholder="Teacher Name"
-                value={editItem.teacherName || ""}
+              >
+                <option value="">Select Teacher</option>
+                {teachers.map((t) => (
+                  <option key={t._id} value={t._id}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+
+              <select
+                value={newAssignment.courseId || ""}
                 onChange={(e) =>
-                  setEditItem({ ...editItem, teacherName: e.target.value })
+                  setNewAssignment({
+                    ...newAssignment,
+                    courseId: e.target.value,
+                  })
                 }
                 className="border p-2 rounded w-full mb-2"
-              />
+              >
+                <option value="">Select Course</option>
+                {courses.map((c) => (
+                  <option key={c._id} value={c._id}>
+                    {c.title}
+                  </option>
+                ))}
+              </select>
+
               <textarea
                 placeholder="Description"
-                value={editItem.description || ""}
+                value={newAssignment.description || ""}
                 onChange={(e) =>
-                  setEditItem({ ...editItem, description: e.target.value })
+                  setNewAssignment({
+                    ...newAssignment,
+                    description: e.target.value,
+                  })
                 }
                 className="border p-2 rounded w-full mb-2"
               />
+
+
+        
+
               <input
-                type="number"
-                placeholder="Duration (weeks)"
-                value={editItem.durationWeeks || ""}
+                type="text"
+                placeholder="Duration"
+                value={newAssignment.durationWeeks || ""}
                 onChange={(e) =>
-                  setEditItem({
-                    ...editItem,
+                  setNewAssignment({
+                    ...newAssignment,
                     durationWeeks: Number(e.target.value),
                   })
                 }
                 className="border p-2 rounded w-full mb-4"
               />
+
               <div className="flex justify-end gap-2">
                 <button
-                  onClick={() => setEditItem(null)}
+                  onClick={() => setShowAddModal(false)}
                   className="px-4 py-2 bg-gray-300 rounded hover:bg-gray-400"
                 >
                   Cancel
                 </button>
                 <button
-                  onClick={handleEditSave}
-                  className="px-4 py-2 bg-[#1E40AF] text-white rounded hover:bg-[#1d49db]"
+                  onClick={handleAddAssignment}
+                  className="px-4 py-2 bg-[#1E40AF] text-white rounded hover:bg-[#1b46d3]"
                 >
-                  Save
+                  Add
                 </button>
               </div>
             </div>

@@ -1,32 +1,48 @@
 "use client";
-import { useState } from "react";
+
+import { useEffect, useState } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { FiEdit, FiTrash2, FiSearch } from "react-icons/fi";
+import Swal from "sweetalert2";
+import withReactContent from "sweetalert2-react-content";
+
+const MySwal = withReactContent(Swal);
+
+import api from "@/utils/api";
 
 interface Teacher {
-  id: number;
+  _id: string;
   name: string;
+  email: string;
+  contact: string;
 }
 
 export default function TeachersPage() {
-  const [teachers, setTeachers] = useState<Teacher[]>([
-    { id: 1, name: "John Smith" },
-    { id: 2, name: "Emily Johnson" },
-    { id: 3, name: "Michael Brown" },
-    { id: 4, name: "Sarah Davis" },
-    { id: 5, name: "David Wilson" },
-    { id: 6, name: "Sophia Martinez" },
-    { id: 7, name: "Daniel Anderson" },
-  ]);
-
+  const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [search, setSearch] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editTeacher, setEditTeacher] = useState<Teacher | null>(null);
   const [teacherName, setTeacherName] = useState("");
-
+  const [teacherEmail, setTeacherEmail] = useState("");
+  const [teacherContact, setTeacherContact] = useState("");
+  const [teacherPassword, setTeacherPassword] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const recordsPerPage = 5;
+
+  // GET teachers from API
+  useEffect(() => {
+    const fetchTeachers = async () => {
+      try {
+        const res = await api.get("/teachers");
+        setTeachers(res.data);
+      } catch (err) {
+        console.error("Error fetching teachers:", err);
+      }
+    };
+    fetchTeachers();
+  }, []);
+
   const filteredTeachers = teachers.filter((t) =>
     t.name.toLowerCase().includes(search.toLowerCase())
   );
@@ -37,40 +53,99 @@ export default function TeachersPage() {
     startIndex + recordsPerPage
   );
 
-  const handleSave = () => {
-    if (teacherName.trim() === "") return;
-    if (editTeacher) {
-      setTeachers((prev) =>
-        prev.map((t) =>
-          t.id === editTeacher.id ? { ...t, name: teacherName } : t
-        )
-      );
-    } else {
-      setTeachers((prev) => [
-        ...prev,
-        { id: Date.now(), name: teacherName },
-      ]);
+  // POST or PUT teacher
+  const handleSave = async () => {
+    if (
+      !teacherName.trim() ||
+      !teacherEmail.trim() ||
+      !teacherContact.trim() ||
+      (!editTeacher && !teacherPassword.trim())
+    )
+      return;
+
+    try {
+      if (editTeacher) {
+        const res = await api.put(`/teachers/${editTeacher._id}`, {
+          name: teacherName,
+          email: teacherEmail,
+          contact: teacherContact,
+        });
+        setTeachers((prev) =>
+          prev.map((t) => (t._id === editTeacher._id ? res.data : t))
+        );
+      } else {
+        const res = await api.post("/teachers", {
+          name: teacherName,
+          email: teacherEmail,
+          contact: teacherContact,
+          password: teacherPassword,
+          courses: [],
+        });
+        setTeachers((prev) => [...prev, res.data]);
+      }
+
+      // Reset form
+      setTeacherName("");
+      setTeacherEmail("");
+      setTeacherContact("");
+      setTeacherPassword("");
+      setEditTeacher(null);
+      setIsModalOpen(false);
+    } catch (err) {
+      console.error("Error saving teacher:", err);
     }
-    setTeacherName("");
-    setEditTeacher(null);
-    setIsModalOpen(false);
   };
 
-  const handleDelete = (id: number) => {
-    if (confirm("Are you sure you want to delete this teacher?")) {
-      setTeachers((prev) => prev.filter((t) => t.id !== id));
+  // delete method
+  const handleDelete = async (id: string) => {
+    try {
+      const result = await MySwal.fire({
+        title: "Are you sure?",
+        text: "This teacher will be permanently deleted!",
+        icon: "warning",
+        showCancelButton: true,
+        confirmButtonColor: "#1E40AF",
+        cancelButtonColor: "#d33",
+        confirmButtonText: "Yes, delete it!",
+      });
+
+      if (result.isConfirmed) {
+        await api.delete(`/teachers/${id}`);
+        setTeachers((prev) => prev.filter((t) => t._id !== id));
+
+        await MySwal.fire({
+          title: "Deleted!",
+          text: "Teacher has been deleted.",
+          icon: "success",
+          confirmButtonColor: "#1E40AF",
+        });
+      }
+    } catch (err) {
+      console.error("Error deleting teacher:", err);
+      await MySwal.fire({
+        title: "Error!",
+        text: "Something went wrong.",
+        icon: "error",
+        confirmButtonColor: "#1E40AF",
+      });
     }
   };
 
   const openAddModal = () => {
     setEditTeacher(null);
     setTeacherName("");
+    setTeacherEmail("");
+    setTeacherContact("");
+    setTeacherPassword("");
     setIsModalOpen(true);
   };
 
   const openEditModal = (teacher: Teacher) => {
     setEditTeacher(teacher);
     setTeacherName(teacher.name);
+    setTeacherEmail(teacher.email);
+    setTeacherContact(teacher.contact);
+    setTeacherPassword("");
     setIsModalOpen(true);
   };
 
@@ -93,9 +168,9 @@ export default function TeachersPage() {
         {/* Search */}
         <div className="relative mb-4">
           <FiSearch className="absolute left-3 top-3 text-gray-400" size={18} />
-         <input
+          <input
             type="text"
-            placeholder="Search students..."
+            placeholder="Search teachers..."
             className="border border-gray-300 p-2 pl-10 rounded-lg w-full shadow-sm focus:outline-none focus:ring-2 focus:ring-[#8ca7ff] transition"
             value={search}
             onChange={(e) => {
@@ -105,22 +180,26 @@ export default function TeachersPage() {
           />
         </div>
 
-        {/* Table */}
-        <div className="overflow-x-auto bg-white rounded-xl shadow-lg border border-gray-100">
+        {/* ✅ Table (md and above) */}
+        <div className="hidden md:block overflow-x-auto bg-white rounded-xl shadow-lg border border-gray-100">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-[#1E40AF] text-white">
                 <th className="p-4">Name</th>
+                <th className="p-4">Email</th>
+                <th className="p-4">Contact</th>
                 <th className="p-4 text-center">Actions</th>
               </tr>
             </thead>
             <tbody>
               {paginatedTeachers.map((t) => (
                 <tr
-                  key={t.id}
+                  key={t._id}
                   className="border-b hover:bg-green-50 transition-colors"
                 >
                   <td className="p-4">{t.name}</td>
+                  <td className="p-4">{t.email}</td>
+                  <td className="p-4">{t.contact}</td>
                   <td className="p-4 flex justify-center gap-4">
                     <button
                       onClick={() => openEditModal(t)}
@@ -129,7 +208,7 @@ export default function TeachersPage() {
                       <FiEdit size={18} />
                     </button>
                     <button
-                      onClick={() => handleDelete(t.id)}
+                      onClick={() => handleDelete(t._id)}
                       className="text-red-500 hover:text-red-700 transition"
                     >
                       <FiTrash2 size={18} />
@@ -140,7 +219,7 @@ export default function TeachersPage() {
               {paginatedTeachers.length === 0 && (
                 <tr>
                   <td
-                    colSpan={2}
+                    colSpan={4}
                     className="p-4 text-center text-gray-500 italic"
                   >
                     No teachers found
@@ -149,6 +228,45 @@ export default function TeachersPage() {
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* ✅ Mobile Cards (below md) */}
+        <div className="block md:hidden space-y-4">
+          {paginatedTeachers.length > 0 ? (
+            paginatedTeachers.map((t) => (
+              <div
+                key={t._id}
+                className="bg-white rounded-lg shadow-md p-4 border border-gray-200"
+              >
+                <h3 className="text-lg font-bold text-[#1E40AF]"> {t.name}</h3>
+                <p className="text-gray-600">
+                  <span className="text-red-600">Email:</span> {t.email}
+                </p>
+                <p className="text-gray-500 text-sm">
+                  <span className="text-red-600">Contact:</span> {t.contact}
+                </p>
+
+                <div className="flex justify-end gap-4 mt-3">
+                  <button
+                    onClick={() => openEditModal(t)}
+                    className="text-blue-500 hover:text-blue-700 transition"
+                  >
+                    <FiEdit size={18} />
+                  </button>
+                  <button
+                    onClick={() => handleDelete(t._id)}
+                    className="text-red-500 hover:text-red-700 transition"
+                  >
+                    <FiTrash2 size={18} />
+                  </button>
+                </div>
+              </div>
+            ))
+          ) : (
+            <p className="text-center text-gray-500 italic">
+              No teachers found
+            </p>
+          )}
         </div>
 
         {/* Pagination */}
@@ -194,6 +312,29 @@ export default function TeachersPage() {
                 value={teacherName}
                 onChange={(e) => setTeacherName(e.target.value)}
               />
+              <input
+                type="email"
+                placeholder="Teacher Email"
+                className="border p-2 rounded-lg w-full mb-4 focus:outline-none focus:ring-2 focus:ring-[#8da7ff]"
+                value={teacherEmail}
+                onChange={(e) => setTeacherEmail(e.target.value)}
+              />
+              <input
+                type="text"
+                placeholder="Teacher Contact"
+                className="border p-2 rounded-lg w-full mb-4 focus:outline-none focus:ring-2 focus:ring-[#8da7ff]"
+                value={teacherContact}
+                onChange={(e) => setTeacherContact(e.target.value)}
+              />
+              {!editTeacher && (
+                <input
+                  type="password"
+                  placeholder="Password"
+                  className="border p-2 rounded-lg w-full mb-4 focus:outline-none focus:ring-2 focus:ring-[#8da7ff]"
+                  value={teacherPassword}
+                  onChange={(e) => setTeacherPassword(e.target.value)}
+                />
+              )}
               <div className="flex justify-end gap-3">
                 <button
                   onClick={() => setIsModalOpen(false)}
