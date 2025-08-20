@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 import ProtectedRoute from "@/components/ProtectedRoute";
-import { FiEdit, FiTrash2, FiEye, FiPlus } from "react-icons/fi";
+import {  FiTrash2,  FiPlus } from "react-icons/fi";
 import Swal from "sweetalert2";
 import api from "@/utils/api";
 
@@ -52,7 +52,7 @@ export default function AssignCoursesToStudentsPage() {
     startIndex + recordsPerPage
   );
 
-  const [viewItem, setViewItem] = useState<Assignment | null>(null);
+  // const [viewItem, setViewItem] = useState<Assignment | null>(null);
   const [editItem, setEditItem] = useState<Assignment | null>(null);
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [newAssignment, setNewAssignment] = useState<Partial<Assignment>>({
@@ -184,20 +184,20 @@ export default function AssignCoursesToStudentsPage() {
 
 
   // Save edited assignment
-  const handleEditSave = async () => {
-    if (!editItem) return;
-    try {
-      await api.put(`/student-courses/${editItem._id}`, editItem);
-      setAssignments((prev) =>
-        prev.map((a) => (a._id === editItem._id ? editItem : a))
-      );
-      setEditItem(null);
-      Swal.fire("Success", "Assignment updated successfully!", "success");
-    } catch (err) {
-      console.error(err);
-      Swal.fire("Error", "Failed to update assignment", "error");
-    }
-  };
+  // const handleEditSave = async () => {
+  //   if (!editItem) return;
+  //   try {
+  //     await api.put(`/student-courses/${editItem._id}`, editItem);
+  //     setAssignments((prev) =>
+  //       prev.map((a) => (a._id === editItem._id ? editItem : a))
+  //     );
+  //     setEditItem(null);
+  //     Swal.fire("Success", "Assignment updated successfully!", "success");
+  //   } catch (err) {
+  //     console.error(err);
+  //     Swal.fire("Error", "Failed to update assignment", "error");
+  //   }
+  // };
 
   return (
     <ProtectedRoute>

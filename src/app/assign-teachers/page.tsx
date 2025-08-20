@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 import ProtectedRoute from "@/components/ProtectedRoute";
-import { FiEdit, FiTrash2, FiEye, FiPlus } from "react-icons/fi";
+import {  FiTrash2, FiPlus } from "react-icons/fi";
 import Swal from "sweetalert2";
 import api from "@/utils/api";
 
