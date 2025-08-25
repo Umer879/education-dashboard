@@ -186,7 +186,7 @@ export default function AssignCoursesToTeachersPage() {
       return;
     }
     try {
-      await api.post("/teacher-courses/assign", {
+      await api.post("/teacher-courses", {
         teacherId: newAssignment.teacherId,
         courseId: newAssignment.courseId,
       });
@@ -299,9 +299,6 @@ export default function AssignCoursesToTeachersPage() {
                 </p>
 
                 <div className="flex justify-end gap-4 mt-3">
-                  <button className="text-blue-500 hover:text-blue-700 transition">
-                    <FiEdit size={18} />
-                  </button>
                   <button className="text-red-500 hover:text-red-700 transition">
                     <FiTrash2 size={18} />
                   </button>

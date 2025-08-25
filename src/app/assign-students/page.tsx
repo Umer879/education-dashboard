@@ -183,22 +183,6 @@ export default function AssignCoursesToStudentsPage() {
 };
 
 
-  // Save edited assignment
-  // const handleEditSave = async () => {
-  //   if (!editItem) return;
-  //   try {
-  //     await api.put(`/student-courses/${editItem._id}`, editItem);
-  //     setAssignments((prev) =>
-  //       prev.map((a) => (a._id === editItem._id ? editItem : a))
-  //     );
-  //     setEditItem(null);
-  //     Swal.fire("Success", "Assignment updated successfully!", "success");
-  //   } catch (err) {
-  //     console.error(err);
-  //     Swal.fire("Error", "Failed to update assignment", "error");
-  //   }
-  // };
-
   return (
     <ProtectedRoute>
       <DashboardLayout>

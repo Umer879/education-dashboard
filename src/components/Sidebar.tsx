@@ -1,14 +1,11 @@
 "use client";
-import { ReactElement, useState } from "react";
+import React from "react";
+import {useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutGrid,
-  GraduationCap,
   UserCheck,
-  BookOpen,
-  UserCog,
-  UsersRound,
   LogOut,
   Menu,
   X
@@ -17,15 +14,16 @@ import {
 interface MenuItem {
   name: string;
   href: string;
-  icon: ReactElement;
+  // icon: JSX.Element;
 }
 
 const menuItems: MenuItem[] = [
-  { name: "Teachers", href: "/teachers", icon: <GraduationCap size={20} /> },
-  { name: "Students", href: "/students", icon: <UserCheck size={20} /> },
-  { name: "Courses", href: "/courses", icon: <BookOpen size={20} /> },
-  { name: "Assign Courses to Teachers", href: "/assign-teachers", icon: <UserCog size={20} /> },
-  { name: "Assign Courses to Students", href: "/assign-students", icon: <UsersRound size={20} /> },
+  { name: "Teachers", href: "/teachers" },
+  { name: "Students", href: "/students" },
+  { name: "Courses", href: "/courses"},
+  { name: "Assign Courses to Teachers", href: "/assign-teachers"  },
+  { name: "Assign Courses to Students", href: "/assign-students" },
+  {name: "Assign Students to Teacher", href: "/assign-students-to-teacher"}
 ];
 
 export default function Sidebar() {
@@ -81,7 +79,7 @@ export default function Sidebar() {
                     : "hover:bg-[#587fff] hover:shadow-lg hover:scale-[1.02]"
                 }`}
               >
-                {item.icon}
+                <UserCheck />
                 <span>{item.name}</span>
               </Link>
             );

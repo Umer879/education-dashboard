@@ -32,16 +32,19 @@ export default function TeachersPage() {
 
   // GET teachers from API
   useEffect(() => {
-    const fetchTeachers = async () => {
-      try {
-        const res = await api.get("/teachers");
-        setTeachers(res.data);
-      } catch (err) {
-        console.error("Error fetching teachers:", err);
-      }
-    };
-    fetchTeachers();
-  }, []);
+  const fetchTeachers = async () => {
+    try {
+      const res = await api.get("/teachers", {
+        withCredentials: true, // 👈 yahan add kar do
+      });
+      setTeachers(res.data);
+    } catch (err) {
+      console.error("Error fetching teachers:", err);
+    }
+  };
+  fetchTeachers();
+}, []);
+
 
   const filteredTeachers = teachers.filter((t) =>
     t.name.toLowerCase().includes(search.toLowerCase())
